@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visa Mock Interview</title>
+    <style type="text/css">
+        body {
+            background-color: #ffff80;
+            font-family: cursive;
+            overflow-x: hidden;
+        }
+        #result {
+            height: 180px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            font-size: 14px;
+            line-height: 25px;
+            padding: 10px;
+        }
+        #result1 {
+            height: 50px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            font-size: 14px;
+            line-height: 25px;
+        }
+        button,input[type="button"], input[type="submit"] {
+            font-size: 23px;
+            padding: 10px 25px;
+            border-radius: 10px;
+            border: 2px solid black;
+            cursor: pointer;
+            background-color: #ff7e00;
+            margin-right: 15px;
+            margin-bottom: 15px;
+        }
+        #feedback {
+            font-size: 18px;
+            color: green;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Visa Mock Interview</h1>
+
+    <form id="visaForm">
+        <label for="visa_type">Visa Type:</label>
+        <select id="visa_type" name="visa_type">
+            <option value="student">Student Visa</option>
+            <option value="work">Work Visa</option>
+        </select><br><br>
+
+        <label for="country">Country:</label>
+        <select id="country" name="country">
+            <option value="USA">USA</option>
+            <option value="UK">UK</option>
+        </select><br><br>
+
+        <button type="submit">Submit</button>
+    </form>
+
+    <h2>Interview Questions:</h2>
+    <div id="questions"></div>
+    <button id="nextQuestion" style="display: none;">Next Question</button>
+    <center>
+        <div id="result" align="center">
+            <form action="result" method="POST">
+                <input type="text" id="result1" size="35" maxlength="100" name="Name" required style="font-family:Courier; font-size: 18px; font-weight: 600" />
+                <br>
+                <button type="button" onclick="startConverting();">Start Voice Input</button>
+                <button type="button" onclick="stopConverting();">Stop Voice Input</button>
+                <br>
+                <input type="submit" value="Submit" />
+                <input type="button" value="Clear" onClick="clearText()" />
+            </form>
+            <div id="feedback"></div>
+        </div>
+    </center>
+    <script>
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let responses = []; // Array to store responses
+        var r = document.getElementById('result1');
+        var feedback = document.getElementById('feedback');
+        var speechRecognizer = new webkitSpeechRecognition();
+    
+        document.getElementById("visaForm").addEventListener("submit", async function(event) {
+            event.preventDefault();
+            
+            const visaType = document.getElementById("visa_type").value;
+            const country = document.getElementById("country").value;
+    
+            const response = await fetch("http://127.0.0.1:8000/questions/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    visa_type: visaType,
+                    country: country,
+                    response: []
+                })
+            });
+    
+            const data = await response.json();
+            questions = data.questions;
+            currentQuestionIndex = 0;
+            responses = []; // Reset responses for new interview
+    
+            // Display the first question
+            displayQuestion();
+            document.getElementById("nextQuestion").style.display = "block";
+        });
+    
+        function startConverting() {
+    if ('webkitSpeechRecognition' in window) {
+        speechRecognizer.continuous = true;
+        speechRecognizer.interimResults = true;
+        speechRecognizer.start();
+        feedback.textContent = "Voice input started...";
+        
+        var finalTranscripts = ''; // To store the final transcripts
+
+        speechRecognizer.onresult = function(event) {
+            var interimTranscripts = ''; // To store the interim transcripts
+            for (var i = event.resultIndex; i < event.results.length; i++) {
+                var transcript = event.results[i][0].transcript;
+                
+                if (event.results[i].isFinal) {
+                    finalTranscripts += transcript; // Append the final transcript
+                } else {
+                    interimTranscripts += transcript; // Append interim transcript
+                }
+            }
+
+            // Combine final and interim transcripts and assign to the input field
+            r.value = finalTranscripts + interimTranscripts;
+        };
+
+        speechRecognizer.onerror = function(event) {
+            feedback.textContent = "Error occurred in speech recognition: " + event.error;
+        };
+
+    } else {
+        feedback.textContent = 'Speech Recognition not supported in this browser. Please upgrade.';
+    }
+}
+
+    
+        function stopConverting() {
+            speechRecognizer.stop();
+            feedback.textContent = "Voice input stopped.";
+        }
+    
+        function clearText() {
+            r.value = "";
+            stopConverting();
+        }
+    
+        function displayQuestion() {
+            const questionsDiv = document.getElementById("questions");
+            questionsDiv.innerHTML = "";
+    
+            if (currentQuestionIndex < questions.length) {
+                const questionElement = document.createElement("p");
+                questionElement.textContent = questions[currentQuestionIndex];
+                questionsDiv.appendChild(questionElement);
+            } else {
+                questionsDiv.innerHTML = "<p>No more questions!</p>";
+                document.getElementById("nextQuestion").style.display = "none";
+                callGeminiAPI(); // Call Gemini API after all questions
+            }
+        }
+    
+        document.getElementById("nextQuestion").addEventListener("click", function() {
+            // Save the current response before moving to the next question
+            responses[currentQuestionIndex] = r.value; // Store the response
+            currentQuestionIndex++;
+            displayQuestion();
+            
+            if (currentQuestionIndex < questions.length) {
+                r.value = ""; // Clear the input for the next question
+                feedback.textContent = ""; // Clear feedback message
+            } else {
+                feedback.textContent = "End of questions.";
+            }
+        });
+    
+        async function callGeminiAPI() {
+            
+            const visaType = document.getElementById("visa_type").value;
+            const country = document.getElementById("country").value;
+    
+            const feedback = await fetch("http://127.0.0.1:8000/feedback/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    visa_type: visaType,
+                    country: country,
+                    response: responses
+                })
+            });
+    
+            const data = await feedback.json();
+            displayFeedback(data); // Function to display feedback from LLM
+        }
+    
+        function displayFeedback(data) {
+
+            console.log("Data received from LLM:", data);
+            if (data || data.contents) {
+                feedback.textContent = data.feedback; // Assuming the response is structured this way
+            } else {
+                feedback.textContent = "No feedback received from LLM.";
+            }
+            
+        }
+    </script>
+    
+</body>
+</html>
+
+
+<!--   
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visa Mock Interview</title>
+</head>
+<body>
+    <h1>Visa Mock Interview</h1>
+
+    <form id="visaForm">
+        <label for="visa_type">Visa Type:</label>
+        <select id="visa_type" name="visa_type">
+            <option value="student">Student Visa</option>
+            <option value="work">Work Visa</option>
+        </select><br><br>
+
+        <label for="country">Country:</label>
+        <select id="country" name="country">
+            <option value="USA">USA</option>
+            <option value="UK">UK</option>
+        </select><br><br>
+
+        <button type="submit">Submit</button>
+    </form>
+
+    <h2>Interview Questions:</h2>
+    <div id="questions"></div>
+
+    <script>
+        document.getElementById("visaForm").addEventListener("submit", async function(event) {
+            event.preventDefault();
+            
+            const visaType = document.getElementById("visa_type").value;
+            const country = document.getElementById("country").value;
+
+            const response = await fetch("http://127.0.0.1:8000/questions/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    visa_type: visaType,
+                    country: country
+                })
+            });
+
+            const data = await response.json();
+            const questionsDiv = document.getElementById("questions");
+
+            // Display the questions on the screen
+            questionsDiv.innerHTML = "";
+            data.questions.forEach(question => {
+                const questionElement = document.createElement("p");
+                questionElement.textContent = question;
+                questionsDiv.appendChild(questionElement);
+            });
+        });
+    </script>
+</body>
+</html>
+
+
+
+
+
+async function callFeedbackAPI() {
+    const visaType = document.getElementById("visa_type").value;
+    const country = document.getElementById("country").value;
+
+    const response = await fetch("http://127.0.0.1:8000/feedback/", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            visa_type: visaType,
+            country: country,
+            response: responses
+        })
+    });
+
+    const data = await response.json();
+    displayFeedback(data); // Function to display feedback from the server
+}
+
+
+-->
